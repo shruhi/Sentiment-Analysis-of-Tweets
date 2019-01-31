@@ -1,0 +1,264 @@
+---
+title: "TwitterSentimentAnalysis"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+##Loading required packages and setting working directory
+
+```{r}
+
+library(dplyr)
+library(plyr)
+library(tidyr)
+
+library(rtweet)
+library(httr)
+library(tm)
+library(wordcloud)
+
+library(rpart)
+library(rpart.plot)
+library(randomForest)
+
+library(syuzhet)
+library(plotly)
+
+library(lubridate)
+library(ggplot2)
+library(grid)
+
+```
+
+##Authentication and Extracting Tweets
+
+To extract tweets from Twitter API, we need to set up a Twitter developer account and set up Twitter Authentication
+
+We want to analyse the sentiments for the tweets that mention the twitter account for the brand Apple, @Apple. We select keywords that will be used to get tweets from Twitter API. Then we use the search_tweets function from the rtweet library. Using this, we can ping upto 18000 tweets every 15 minutes from the last 7 days. We will exclude retweets and focus only on tweets in English. Then we will export this as a csv and use that csv file for our analysis.
+
+We then use only the columns we need and remove duplicate tweets.
+
+```{r}
+
+tweet_df <- read.csv("/Users/shruhi/Desktop/Project/Tweets.csv", stringsAsFactors = FALSE)
+rt_only_tweets <- subset(tweet_df, select = c(1))
+tweets_df <- unique(rt_only_tweets)
+
+head(tweets_df)
+```
+
+##Cleaning Data
+
+To conduct a sentiment analysis, we use Natural Language Processing. It consists of many many algorithms, some of which we will be implementing here using the text mining package in R called (tm).
+
+First, we do a basic cleaning of the data. We get rid of unwanted characters that are frequently found in tweets, such as "&amp", "RT|via", "http\\w+", etc.
+
+For data cleaning, tweet text is converted into a Corpora. We now have a 'corpus', or in simple words, a collection of written texts. To analyse the text, we need to clean this corpus. First of all, we convert all words to lowercase and remove punctuation. We also need to remove "stopwords", i.e. words like for, that, on, etc that don't really have an impact on the sentiment of the written text.
+
+To visualise the frequent words, we use a wordcloud.
+
+In any language, words are often associated that have a similar meaning - e.g. "associate" and "associated" can be interchanged as their impact is only on the grammar and syntax, not on the meaning of the sentence. To avoid repeating words, we use "stemming" in Natural Language Processing. Stemming is the process of reducing inflected (or sometimes derived) words to their word stem, base or root form—generally a written word form.
+
+After this, we can create a document term matrix. A document-term matrix is a mathematical matrix that describes the frequency of terms that occur in a collection of documents. In a document-term matrix, rows correspond to documents in the collection and columns correspond to terms.
+
+Lastly, a document-term matrix has at least a sparse percentage of empty (i.e., terms occurring zero times in the document) elements. We remove this, and specify the sparsity such that the resulting matrix contains only terms with a sparse factor of less than specified 'sparse', here, 0.99.
+
+```{r}
+
+clean_text <- function(x){
+
+  x <- gsub("&amp", "", x)
+  x <- gsub("@\\w+", "", x)
+  x <- gsub("[[:punct:]]", "", x)
+  x <- gsub("[[:digit:]]", "", x)
+  x <- gsub("http\\w+", "", x)
+  x <- gsub("[ \t]{2,}", "", x)
+  x <- gsub("^\\s+|\\s+$", "", x)
+  x <- iconv(x, "ASCII", "UTF-8", sub = "")
+}
+
+tweets_df$text <- clean_text(tweets_df$text)
+
+#Cleaning the corpus
+corpusiphone <- Corpus(VectorSource(tweets_df$text))
+
+#Convert all to lower case
+corpusiphone <- tm_map(corpusiphone, tolower)
+
+#Removing punctuation
+corpusiphone <- tm_map(corpusiphone, removePunctuation)
+
+#Removing stopwords
+corpusiphone <- tm_map(corpusiphone, removeWords, c(stopwords("en")))
+
+#Creating a WordCloud
+wordcloud(corpusiphone,colors=rainbow(7),max.words=150)
+corpusiphone <- tm_map(corpusiphone, stripWhitespace)
+
+#Creating Stem Document
+corpusiphone <- tm_map(corpusiphone, stemDocument)
+
+#Creating Document Term Matrix
+frequenciesiphone <- DocumentTermMatrix(corpusiphone)
+frequenciesiphone
+
+#Remove Sparse Terms
+iphonesparse <- removeSparseTerms(frequenciesiphone, 0.99)
+
+iphonesparse <- as.matrix(iphonesparse)
+iphonesparse <- as.data.frame(iphonesparse)
+colnames(iphonesparse) <- make.names(colnames(iphonesparse)) #make variable names R-friendly
+
+```
+
+##Sentiment Analysis
+
+For sentiment analysis, we use the Syuzhet package. The package comes with four sentiment dictionaries and provides a method for accessing sentiment extraction tools. It iterates over a vector of strings and returns sentiment values based on user specified methods. We will implement two methods - 
+
+1. Polarity Analysis using "syuzhet" + We will get the sentiments in the form of polarities. It will be converted into categorical variables "Positive", "Neutral", "Negative"
+
+
+###Polarity analysis
+
+```{r}
+
+sentiment_value <- get_sentiment(tweets_df$text)
+
+#Making the categorical variable of the sentiment values
+category_sentiments <- ifelse(sentiment_value < 0, "Negative", 
+                              ifelse(sentiment_value > 0, "Positive", "Neutral"))
+iphonesparse$polarity <- category_sentiments
+three_polarity <- data.frame(table(iphonesparse$polarity))
+
+col <- c("tomato3","moccasin","palegreen4")
+plot_ly(three_polarity, x = three_polarity$Var1, y = three_polarity$Freq, type = "bar", color = three_polarity$Var1, colors = col)
+
+#To test this, we can run a CART and Random Forest
+cart <- rpart(polarity ~ ., data = iphonesparse, method = "class")
+prp(cart, extra = 2)
+
+set.seed(320)
+iphonesparse$polarity <- as.factor(iphonesparse$polarity)
+iphone_rf <- randomForest(polarity ~ ., data = iphonesparse)
+varImpPlot(iphone_rf)
+
+```
+
+###Emotion Analysis
+
+2. Emotion Analysis using "nrc" + We will get the sentiment in the form of emotions - 'Anger', 'Anticipation', 'Disgust', 'Fear', 'Joy', 'Sadness', 'Surprise', 'Trust'
+
+```{r}
+
+emotions <- get_nrc_sentiment(tweets_df$text)
+emotion <- colSums(emotions[-c(9,10)])
+emotion <- data.frame(Sum = emotion, Emotions = names(emotion))
+
+polarity <- colSums(emotions[c(9,10)])
+polarity <- data.frame(Sum = polarity, Polarity = names(polarity))
+
+plot_ly(polarity, x = emotion$Emotions, y = emotion$Sum, type = "bar", color = emotion$Emotions)
+colour <- c("orangered4", "olivedrab4")
+plot_ly(polarity, x = polarity$Polarity, y = polarity$Sum, type = "bar", color = polarity$Polarity, colors = colour)
+
+```
+
+Comparison Word Clouds:
+
+To delve a little bit deeper into the analysis, we tried to find out the words that were most commonly associated with each emotion, as well as with each polarity. This would be best visually depicted in the form of comparison word clouds.
+
+###1. Emotion Analysis
+
+```{r}
+
+dup <- tweets_df
+
+sentiment = function(df){
+  df$syuzhet <- get_sentiment(df$text, method = "syuzhet")
+  df$bing <- get_sentiment(df$text, method = "bing")
+  df$afinn <- get_sentiment(df$text, method = "afinn")
+  df$nrc <- get_sentiment(df$text, method = "nrc")
+  emot <- get_nrc_sentiment(df$text)
+  n <- names(emot)
+  for(m in n) 
+    df[,m] <- emot[m]
+  return(df)
+}
+
+dup <- sentiment(dup)
+
+a <- c(
+  paste(dup$text[dup$anger > 0], collapse = " "),
+  paste(dup$text[dup$anticipation > 0], collapse = " "),
+  paste(dup$text[dup$disgust > 0], collapse = " "),
+  paste(dup$text[dup$sadness > 0], collapse = " "),
+  paste(dup$text[dup$surprise > 0], collapse = " "),
+  paste(dup$text[dup$trust > 0], collapse = " "),
+  paste(dup$text[dup$fear > 0], collapse = " "),
+  paste(dup$text[dup$joy > 0], collapse = " ")
+  )
+
+#clean text
+a <- clean_text(a)
+
+#Remove stop-words
+a <- removeWords(a, c(stopwords("english")))
+
+#Create corpus
+corps <- Corpus(VectorSource(a))
+
+corps <- tm_map(corps, removePunctuation)
+
+#Create term-document matrix
+matx <- TermDocumentMatrix(corps)
+
+matx <- as.matrix(matx)
+
+#Add column names
+colnames(matx) <- c('Anger', 'Anticipation', 'Disgust', 'Sadness', 'Surprise', 'Trust', 'Fear', 'Joy')
+
+#Plot comparison wordcloud
+
+comparison.cloud(matx, max.words = 300, random.order = FALSE, colors = brewer.pal(8, "Dark2"), scale = c(0.8,0.4), match.colors = TRUE, title.size = 1)
+
+```
+
+###2. Polarity Analysis
+
+```{r}
+
+all_p <- c(
+  paste(dup$text[dup$positive > 0], collapse = " "),
+  paste(dup$text[dup$negative > 0], collapse = " ")
+  )
+
+#Clean text
+all_p <- clean_text(all_p)
+
+#Remove stop-words
+all_p <- removeWords(all_p, c(stopwords("english")))
+
+#Create corpus
+corpus_p <- Corpus(VectorSource(all_p))
+
+#Create term-document matrix
+tdm_p <- as.matrix(TermDocumentMatrix(corpus_p))
+
+#Add column names
+colnames(tdm_p) <- c("Positive", "Negative")
+
+#Plot comparison wordcloud
+
+comparison.cloud(tdm_p, random.order = FALSE, colors = c("forestgreen", "darkred"), title.size = 3, max.words = 250, use.r.layout = FALSE, scale = c(2,0.4))
+
+```
+
+
+
