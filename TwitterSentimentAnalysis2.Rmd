@@ -19,8 +19,6 @@ library(dplyr)
 library(plyr)
 library(tidyr)
 
-library(rtweet)
-library(httr)
 library(tm)
 library(wordcloud)
 
@@ -39,11 +37,7 @@ library(grid)
 
 ##Authentication and Extracting Tweets
 
-To extract tweets from Twitter API, we need to set up a Twitter developer account and set up Twitter Authentication
-
-We want to analyse the sentiments for the tweets that mention the twitter account for the brand Apple, @Apple. We select keywords that will be used to get tweets from Twitter API. Then we use the search_tweets function from the rtweet library. Using this, we can ping upto 18000 tweets every 15 minutes from the last 7 days. We will exclude retweets and focus only on tweets in English. Then we will export this as a csv and use that csv file for our analysis.
-
-We then use only the columns we need and remove duplicate tweets.
+Extracting Tweets R code mentioned in other file (using twitteR)
 
 ```{r}
 
@@ -56,19 +50,17 @@ head(tweets_df)
 
 ##Cleaning Data
 
-To conduct a sentiment analysis, we use Natural Language Processing. It consists of many many algorithms, some of which we will be implementing here using the text mining package in R called (tm).
+Text mining package that's used is (tm).
 
-First, we do a basic cleaning of the data. We get rid of unwanted characters that are frequently found in tweets, such as "&amp", "RT|via", "http\\w+", etc.
+First, basic cleaning of the data by removing unwanted characters such as "&amp", "RT|via", "http\\w+", etc.
 
-For data cleaning, tweet text is converted into a Corpora. We now have a 'corpus', or in simple words, a collection of written texts. To analyse the text, we need to clean this corpus. First of all, we convert all words to lowercase and remove punctuation. We also need to remove "stopwords", i.e. words like for, that, on, etc that don't really have an impact on the sentiment of the written text.
+For data cleaning, tweet text is converted into a Corpora. To clean this corpus, convert all words to lowercase, remove punctuation, remove "stopwords"(words like for, that, on, etc)
 
 To visualise the frequent words, we use a wordcloud.
 
 In any language, words are often associated that have a similar meaning - e.g. "associate" and "associated" can be interchanged as their impact is only on the grammar and syntax, not on the meaning of the sentence. To avoid repeating words, we use "stemming" in Natural Language Processing. Stemming is the process of reducing inflected (or sometimes derived) words to their word stem, base or root form—generally a written word form.
 
-After this, we can create a document term matrix. A document-term matrix is a mathematical matrix that describes the frequency of terms that occur in a collection of documents. In a document-term matrix, rows correspond to documents in the collection and columns correspond to terms.
-
-Lastly, a document-term matrix has at least a sparse percentage of empty (i.e., terms occurring zero times in the document) elements. We remove this, and specify the sparsity such that the resulting matrix contains only terms with a sparse factor of less than specified 'sparse', here, 0.99.
+A document-term matrix is a mathematical matrix that describes the frequency of terms that occur in a collection of documents. In a document-term matrix, rows correspond to documents in the collection and columns correspond to terms. sparsity = 0.99
 
 ```{r}
 
@@ -120,9 +112,10 @@ colnames(iphonesparse) <- make.names(colnames(iphonesparse)) #make variable name
 
 ##Sentiment Analysis
 
-For sentiment analysis, we use the Syuzhet package. The package comes with four sentiment dictionaries and provides a method for accessing sentiment extraction tools. It iterates over a vector of strings and returns sentiment values based on user specified methods. We will implement two methods - 
+Two methods are implemented - 
 
-1. Polarity Analysis using "syuzhet" + We will get the sentiments in the form of polarities. It will be converted into categorical variables "Positive", "Neutral", "Negative"
+1. Polarity Analysis using "syuzhet" 
+ - Sentiments in the form of polarities. It will be converted into categorical variables "Positive", "Neutral", "Negative"
 
 
 ###Polarity analysis
@@ -153,7 +146,8 @@ varImpPlot(iphone_rf)
 
 ###Emotion Analysis
 
-2. Emotion Analysis using "nrc" + We will get the sentiment in the form of emotions - 'Anger', 'Anticipation', 'Disgust', 'Fear', 'Joy', 'Sadness', 'Surprise', 'Trust'
+2. Emotion Analysis using "nrc" 
+    -Sentiment in the form of emotions - 'Anger', 'Anticipation', 'Disgust', 'Fear', 'Joy', 'Sadness', 'Surprise', 'Trust'
 
 ```{r}
 
@@ -171,8 +165,7 @@ plot_ly(polarity, x = polarity$Polarity, y = polarity$Sum, type = "bar", color =
 ```
 
 Comparison Word Clouds:
-
-To delve a little bit deeper into the analysis, we tried to find out the words that were most commonly associated with each emotion, as well as with each polarity. This would be best visually depicted in the form of comparison word clouds.
+  -Word Cloud is used to find out the words that were most commonly associated with each emotion, as well as with each polarity
 
 ###1. Emotion Analysis
 
