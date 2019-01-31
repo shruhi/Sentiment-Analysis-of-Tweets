@@ -110,6 +110,8 @@ colnames(iphonesparse) <- make.names(colnames(iphonesparse)) #make variable name
 
 ```
 
+![](Sentiment-Analysis-of-Tweets/WordCloud.png)
+
 ##Sentiment Analysis
 
 Two methods are implemented - 
